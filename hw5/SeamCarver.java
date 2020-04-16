@@ -10,8 +10,7 @@ public class SeamCarver {
     private int width;
     private int height;
     private double[][] energyMap;
-    private double[][] energyMapTrans; // transposed energyMap
-    private PathNode[][] pathCostMap;
+    private PathNode[] pathCostArray;
 
     public SeamCarver(Picture picture) {
         inPicture = new Picture(picture);
@@ -20,8 +19,6 @@ public class SeamCarver {
         /** Coordinate of 2D arrary are opposite to that of pixel in picture */
         /** align 2D array to pixel */
         energyMap = new double[width][height];
-        energyMapTrans = new double[height][width];
-        pathCostMap = new PathNode[width][height];
         for (int x = 0; x < width; x += 1) {
             for (int y = 0; y < height; y += 1) {
                 energyMap[x][y] = energy(x, y);
@@ -52,6 +49,14 @@ public class SeamCarver {
         double blueDiff = color1.getBlue() - color2.getBlue();
         return redDiff * redDiff + greenDiff * greenDiff + blueDiff * blueDiff;
     }
+    /** save memory space by keeping only one energy map*/
+    private double getEnergy(int x, int y, boolean isVertical) {
+        if (isVertical) {
+            return energyMap[x][y];
+        } else {
+            return energyMap[y][x];
+        }
+    }
 
     // energy of pixel at column x and row y
     public double energy(int x, int y) {
@@ -70,16 +75,13 @@ public class SeamCarver {
 
     // sequence of indices for horizontal seam
     public int[] findHorizontalSeam() {
-        for (int x = 0; x < width; x += 1) {
-            for (int y = 0; y < height; y += 1) {
-                energyMapTrans[y][x] = energyMap[x][y];
-            }
-        }
-        return findVerticalSeamHelper(height, width, energyMapTrans);
+        pathCostArray = new PathNode[height];
+        return findVerticalSeamHelper(height, width, false);
     }
 
     public int[] findVerticalSeam() {
-        return findVerticalSeamHelper(width, height, energyMap);
+        pathCostArray = new PathNode[width];
+        return findVerticalSeamHelper(width, height, true);
     }
 
     /** PathNode contains both path to the current pixel and the total*/
@@ -92,6 +94,22 @@ public class SeamCarver {
             path = new LinkedList(prevPathList);
         }
 
+        public double getCost() {
+            return mCost;
+        }
+
+        public LinkedList<Integer> getPath() {
+            return path;
+        }
+
+        public void addPath(int p) {
+            path.addFirst(p);
+        }
+
+        public void setCost(double inCost) {
+            mCost = inCost;
+        }
+
         @Override
         public int compareTo(PathNode other) {
             Double diff = new Double(this.mCost - other.mCost);
@@ -99,37 +117,48 @@ public class SeamCarver {
         }
     }
 
-    private void pathCostDecider(int x, int y, int inWidth,  double[][] inMap) {
-        //System.out.println("[Decide Path For][" + x + "][" + y + "]");
-        // row, col index is in pixel coordinate
+    private PathNode pathNodeCalc(int x, int y, int inWidth, boolean  isVertical) {
         if (y == 0) {
             LinkedList<Integer> path = new LinkedList();
             path.add(x);
-            pathCostMap[x][y] = new PathNode(inMap[x][y], path);
-            return;
+            return new PathNode(getEnergy(x, y, isVertical), path);
         }
 
         // num of path to choose from
         int numPath = (x == 0 || x == inWidth - 1) ? 2 : 3;
         int xPrevStart = (x == 0) ? 0 : x - 1;
-        int yPrev = y - 1;
 
         LinkedList<PathNode> pathList = new LinkedList();
         for (int i = 0; i < numPath; i += 1) {
-            pathList.addLast(pathCostMap[xPrevStart][yPrev]);
+            pathList.addLast(pathCostArray[xPrevStart]);
             xPrevStart += 1;
         }
         Collections.sort(pathList);
         PathNode selectPathNode = pathList.getFirst();
-
         LinkedList<Integer> selectPath = new LinkedList(selectPathNode.path);
         selectPath.addLast(x); // add x itself to the selected path
-        double newCost = selectPathNode.mCost + inMap[x][y];  // add cost to the selected path cose
-        pathCostMap[x][y] = new PathNode(newCost, selectPath);
+        // add cost to the selected path
+        double newCost = selectPathNode.getCost() + getEnergy(x, y, isVertical);
+        return new PathNode(newCost, selectPath);
+    }
+
+    /** calculate the new row and replace the previous one*/
+    private void costCalculator(int inWidth, int inHeight, boolean isVertical) {
+
+        /** 1. start from top row, iterate over each pixel from left to right to compute M(i,j)
+         *  2. calculate the new row and replace the previous one
+         *  */
+        for (int y = 0; y < inHeight; y += 1) {
+            PathNode[] nextArray = new PathNode[inWidth];
+            for (int x = 0; x < inWidth; x += 1) {
+                nextArray[x] = pathNodeCalc(x, y, inWidth, isVertical);
+            }
+            pathCostArray = nextArray;
+        }
     }
 
     // sequence of indices for vertical seam
-    private int[] findVerticalSeamHelper(int inWidth, int inHeight, double[][] inMap) {
+    private int[] findVerticalSeamHelper(int inWidth, int inHeight, boolean isVertical) {
         /**
          * 1. start from top row, iterate over each pixel from left to right to compute M(i,j)
          * 2. use List to track of the total path to (i,j)
@@ -139,27 +168,23 @@ public class SeamCarver {
          * 6. after last row is computed, find the smallest M(i, height - 1)
          * */
 
-        // row, col index is in pixel coordinate
-        for (int y = 0; y < inHeight; y += 1) {
-            for (int x = 0; x < inWidth; x += 1) {
-                pathCostDecider(x, y, inWidth, inMap);  // align 2D array to pixel
-            }
-        }
+        costCalculator(inWidth, inHeight, isVertical);
 
-        PathNode minPathNode = pathCostMap[0][inHeight - 1];
+        PathNode minPathNode = pathCostArray[0];
         for (int x = 1; x < inWidth; x += 1) {
-            if (pathCostMap[x][inHeight - 1].mCost < minPathNode.mCost) {
-                minPathNode = pathCostMap[x][inHeight - 1];
+            if (pathCostArray[x].getCost() < minPathNode.getCost()) {
+                minPathNode = pathCostArray[x];
             }
         }
 
         int[] findPath = new int[inHeight];
-        Iterator<Integer> pathIterator = minPathNode.path.iterator();
+        LinkedList<Integer> findPathList = minPathNode.getPath();
+        Iterator<Integer> pathIterator = findPathList.iterator();
         for (int i = 0; i < inHeight; i += 1) {
             findPath[i] = pathIterator.next();
         }
 
-        //printMap();
+        //System.out.println(Arrays.toString(findPath));
         return findPath;
     }
 
@@ -180,22 +205,4 @@ public class SeamCarver {
         inPicture = SeamRemover.removeVerticalSeam(inPicture, seam);
         return;
     }
-
-    private void printMap() {
-        for (int y = 0; y < height; y += 1) {
-            for (int x = 0; x < width; x += 1) {
-                System.out.print(pathCostMap[x][y].mCost + ",  ");
-            }
-            System.out.println();
-        }
-
-        for (int y = 0; y < height; y += 1) {
-            for (int x = 0; x < width; x += 1) {
-                System.out.println("(" + x + "," + y + ") |Cost|: "
-                        + pathCostMap[x][y].mCost + " |Path|: " + pathCostMap[x][y].path);
-            }
-            System.out.println();
-        }
-    }
-
 }
