@@ -86,6 +86,9 @@ public class SeamCarver {
 
     private int[] dpCalculator(int inWidth, int inHeight, boolean isVertical) {
 
+        if (inWidth == 1) { // only one direction
+            return new int[inHeight];
+        }
         double[][] dpArray = new double[inWidth][inHeight];
 
         for (int y = 0; y < inHeight; y += 1) {
