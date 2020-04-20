@@ -1,16 +1,17 @@
 import java.awt.Color;
-import java.util.Collections;
-import java.util.Iterator;
 import java.util.LinkedList;
 import edu.princeton.cs.algs4.Picture;
-
+/** this is a typical problem for dynamic programming
+ * where DP array dp[i][j] is the total cost from (i, j) to the last row;
+ * after calculate for all i & j, find the smallest one in dp[0][j]
+ * DP array implicitly indicate the path, by reversely calculating dp[][] with subtraction of energy map
+ * */
 public class SeamCarver {
 
     private Picture inPicture;
     private int width;
     private int height;
     private double[][] energyMap;
-    private PathNode[] pathCostArray;
 
     public SeamCarver(Picture picture) {
         inPicture = new Picture(picture);
@@ -75,117 +76,75 @@ public class SeamCarver {
 
     // sequence of indices for horizontal seam
     public int[] findHorizontalSeam() {
-        pathCostArray = new PathNode[height];
-        return findVerticalSeamHelper(height, width, false);
+        return dpCalculator(height, width, false);
     }
 
     public int[] findVerticalSeam() {
-        pathCostArray = new PathNode[width];
-        return findVerticalSeamHelper(width, height, true);
+        return dpCalculator(width, height, true);
     }
 
-    /** PathNode contains both path to the current pixel and the total*/
-    private class PathNode implements Comparable<PathNode> {
-        private double mCost; // M(i,j)
-        private LinkedList<Integer> path;
+    private int[] dpCalculator(int inWidth, int inHeight, boolean isVertical) {
 
-        private PathNode(double cost, LinkedList<Integer> prevPathList) {
-            mCost = cost;
-            path = new LinkedList(prevPathList);
-        }
+        double[][] dpArray = new double[inWidth][inHeight];
 
-        public double getCost() {
-            return mCost;
-        }
-
-        public LinkedList<Integer> getPath() {
-            return path;
-        }
-
-        public void addPath(int p) {
-            path.addFirst(p);
-        }
-
-        public void setCost(double inCost) {
-            mCost = inCost;
-        }
-
-        @Override
-        public int compareTo(PathNode other) {
-            Double diff = new Double(this.mCost - other.mCost);
-            return diff.intValue();
-        }
-    }
-
-    private PathNode pathNodeCalc(int x, int y, int inWidth, boolean  isVertical) {
-        if (y == 0) {
-            LinkedList<Integer> path = new LinkedList();
-            path.add(x);
-            return new PathNode(getEnergy(x, y, isVertical), path);
-        }
-
-        // num of path to choose from
-        int numPath = (x == 0 || x == inWidth - 1) ? 2 : 3;
-        int xPrevStart = (x == 0) ? 0 : x - 1;
-
-        LinkedList<PathNode> pathList = new LinkedList();
-        for (int i = 0; i < numPath; i += 1) {
-            pathList.addLast(pathCostArray[xPrevStart]);
-            xPrevStart += 1;
-        }
-        Collections.sort(pathList);
-        PathNode selectPathNode = pathList.getFirst();
-        LinkedList<Integer> selectPath = new LinkedList(selectPathNode.path);
-        selectPath.addLast(x); // add x itself to the selected path
-        // add cost to the selected path
-        double newCost = selectPathNode.getCost() + getEnergy(x, y, isVertical);
-        return new PathNode(newCost, selectPath);
-    }
-
-    /** calculate the new row and replace the previous one*/
-    private void costCalculator(int inWidth, int inHeight, boolean isVertical) {
-
-        /** 1. start from top row, iterate over each pixel from left to right to compute M(i,j)
-         *  2. calculate the new row and replace the previous one
-         *  */
         for (int y = 0; y < inHeight; y += 1) {
-            PathNode[] nextArray = new PathNode[inWidth];
             for (int x = 0; x < inWidth; x += 1) {
-                nextArray[x] = pathNodeCalc(x, y, inWidth, isVertical);
+                dpArray[x][y] = getEnergy(x, y, isVertical);
+                if (y > 0) {
+                    if (x == 0) {
+                        dpArray[x][y] += Math.min(dpArray[x][y - 1], dpArray[x + 1][y - 1]);
+                    } else if (x == inWidth - 1) {
+                        dpArray[x][y] += Math.min(dpArray[x - 1][y - 1], dpArray[x][y - 1]);
+                    } else {
+                        dpArray[x][y] += Math.min(dpArray[x - 1][y - 1], Math.min(dpArray[x][y - 1], dpArray[x + 1][y - 1]));
+                    }
+                }
             }
-            pathCostArray = nextArray;
         }
-    }
 
-    // sequence of indices for vertical seam
-    private int[] findVerticalSeamHelper(int inWidth, int inHeight, boolean isVertical) {
-        /**
-         * 1. start from top row, iterate over each pixel from left to right to compute M(i,j)
-         * 2. use List to track of the total path to (i,j)
-         * 3. List node are the path, which is also a List and cost
-         * 4. sorted the list and the node with min cost is assigned to M(i,j)
-         * 5. compute next row
-         * 6. after last row is computed, find the smallest M(i, height - 1)
-         * */
-
-        costCalculator(inWidth, inHeight, isVertical);
-
-        PathNode minPathNode = pathCostArray[0];
+        double minCost = dpArray[0][inHeight - 1];
+        int minCostIndex = 0;
         for (int x = 1; x < inWidth; x += 1) {
-            if (pathCostArray[x].getCost() < minPathNode.getCost()) {
-                minPathNode = pathCostArray[x];
+            if (dpArray[x][inHeight - 1] < minCost) {
+                minCostIndex = x;
             }
         }
-
-        int[] findPath = new int[inHeight];
-        LinkedList<Integer> findPathList = minPathNode.getPath();
-        Iterator<Integer> pathIterator = findPathList.iterator();
-        for (int i = 0; i < inHeight; i += 1) {
-            findPath[i] = pathIterator.next();
+        // the list to keep track index from bottom row to top row
+        LinkedList<Integer> minCostPath = new LinkedList<>();
+        minCostPath.add(minCostIndex);
+        int nextIndex = minCostIndex;
+        for (int y = inHeight - 1; y > 0; y -= 1) {
+            double dpExclude =  dpArray[nextIndex][y] - getEnergy(nextIndex, y, isVertical);
+            if (0 < nextIndex && nextIndex < inWidth - 1) {
+                if (dpExclude == dpArray[nextIndex - 1][y - 1]) {
+                    nextIndex = nextIndex - 1;
+                } else if (dpExclude == dpArray[nextIndex][y - 1]) {
+                    nextIndex = nextIndex;
+                } else if (dpExclude == dpArray[nextIndex + 1][y - 1]) {
+                    nextIndex = nextIndex + 1;
+                }
+            } else {
+                if (nextIndex == inWidth - 1) {
+                    if (dpExclude == dpArray[nextIndex - 1][y - 1]) {
+                        nextIndex = nextIndex - 1;
+                    } else if (dpExclude == dpArray[nextIndex][y - 1]) {
+                        nextIndex = nextIndex;
+                    }
+                } else if (nextIndex == 0) {
+                    if (dpExclude == dpArray[nextIndex][y - 1]) {
+                        nextIndex = nextIndex;
+                    } else if (dpExclude == dpArray[nextIndex + 1][y - 1]) {
+                        nextIndex = nextIndex + 1;
+                    }
+                }
+            }
+            minCostPath.addFirst(nextIndex);
         }
-
-        //System.out.println(Arrays.toString(findPath));
-        return findPath;
+        int[] outArray = new int[inHeight];
+        for (int index = 0; index < inHeight; index += 1) {
+            outArray[index] = minCostPath.get(index);
+        }
+        return outArray;
     }
 
     // remove horizontal seam from picture
