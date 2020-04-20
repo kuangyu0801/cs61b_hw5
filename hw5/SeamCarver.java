@@ -30,7 +30,7 @@ public class SeamCarver {
 
     // current picture
     public Picture picture() {
-        return inPicture;
+        return new Picture(inPicture);
     }
 
     // width of current picture
