@@ -4,7 +4,8 @@ import edu.princeton.cs.algs4.Picture;
 /** this is a typical problem for dynamic programming
  * where DP array dp[i][j] is the total cost from (i, j) to the last row;
  * after calculate for all i & j, find the smallest one in dp[0][j]
- * DP array implicitly indicate the path, by reversely calculating dp[][] with subtraction of energy map
+ * DP array implicitly indicate the path,
+ * by reversely calculating dp[][] with subtraction of energy map
  * */
 public class SeamCarver {
 
@@ -96,7 +97,8 @@ public class SeamCarver {
                     } else if (x == inWidth - 1) {
                         dpArray[x][y] += Math.min(dpArray[x - 1][y - 1], dpArray[x][y - 1]);
                     } else {
-                        dpArray[x][y] += Math.min(dpArray[x - 1][y - 1], Math.min(dpArray[x][y - 1], dpArray[x + 1][y - 1]));
+                        double minFirstTwo = Math.min(dpArray[x][y - 1], dpArray[x + 1][y - 1]);
+                        dpArray[x][y] += Math.min(dpArray[x - 1][y - 1], minFirstTwo);
                     }
                 }
             }
@@ -107,6 +109,7 @@ public class SeamCarver {
         for (int x = 1; x < inWidth; x += 1) {
             if (dpArray[x][inHeight - 1] < minCost) {
                 minCostIndex = x;
+                minCost = dpArray[x][inHeight - 1];
             }
         }
         // the list to keep track index from bottom row to top row
@@ -114,7 +117,7 @@ public class SeamCarver {
         minCostPath.add(minCostIndex);
         int nextIndex = minCostIndex;
         for (int y = inHeight - 1; y > 0; y -= 1) {
-            double dpExclude =  dpArray[nextIndex][y] - getEnergy(nextIndex, y, isVertical);
+            double dpExclude = dpArray[nextIndex][y] - getEnergy(nextIndex, y, isVertical);
             if (0 < nextIndex && nextIndex < inWidth - 1) {
                 if (dpExclude == dpArray[nextIndex - 1][y - 1]) {
                     nextIndex = nextIndex - 1;
@@ -140,11 +143,29 @@ public class SeamCarver {
             }
             minCostPath.addFirst(nextIndex);
         }
+        //debugging(dpArray, outArry);
+
         int[] outArray = new int[inHeight];
         for (int index = 0; index < inHeight; index += 1) {
             outArray[index] = minCostPath.get(index);
         }
         return outArray;
+    }
+
+    private void debugging(double[][] dpArray, int[] outArray) {
+        System.out.print("dpArray is :");
+        for (int y = 0; y < dpArray[0].length; y += 1) {
+            for (int x = 0; x < dpArray.length; x += 1) {
+                System.out.print(dpArray[x][y] + "0 ");
+            }
+            System.out.println();
+        }
+
+        System.out.print("Out Array is :{");
+        for (int index = 0; index < outArray.length; index += 1) {
+            System.out.print(outArray[index] + ", ");
+        }
+        System.out.print("}");
     }
 
     // remove horizontal seam from picture
